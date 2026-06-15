@@ -23,6 +23,9 @@ if "qa_chain_needs_rebuild" not in st.session_state:
 if "processed_documents" not in st.session_state:
     st.session_state.processed_documents = []
 
+if "processed_urls" not in st.session_state:
+    st.session_state.processed_urls = []
+
 
 def main():
     # Custom CSS for professional styling
@@ -134,24 +137,74 @@ def main():
         
         st.divider()
         
+        # URL ingestion
+        st.header("🌐 URL Ingestion")
+        url_input = st.text_area(
+            "Enter URLs (one per line)",
+            placeholder="https://example.com/article1\nhttps://example.com/article2",
+            help="Enter web URLs to ingest content from"
+        )
+        
+        if st.button("Ingest URLs"):
+            if url_input.strip():
+                urls = [url.strip() for url in url_input.split('\n') if url.strip()]
+                with st.spinner("Fetching and processing URLs..."):
+                    try:
+                        results = st.session_state.rag_core.ingest_urls(urls)
+                        
+                        # Update processed URLs list
+                        for success_item in results['success']:
+                            if success_item['url'] not in st.session_state.processed_urls:
+                                st.session_state.processed_urls.append(success_item['url'])
+                        
+                        # Show results
+                        if results['success']:
+                            st.session_state.qa_chain_needs_rebuild = True
+                            success_urls = [item['url'] for item in results['success']]
+                            st.success(f"Successfully ingested {len(success_urls)} URLs ({results['total_chunks']} chunks)")
+                        
+                        if results['failed']:
+                            failed_info = [f"{item['url']}: {item['error']}" for item in results['failed']]
+                            st.error(f"Failed URLs:\n" + "\n".join(failed_info))
+                        
+                        if results['skipped']:
+                            st.info(f"Skipped {len(results['skipped'])} URLs (already processed)")
+                    
+                    except Exception as e:
+                        st.error(f"Error processing URLs: {str(e)}")
+            else:
+                st.warning("Please enter at least one URL")
+        
+        st.divider()
+        
         # Clear vector store
         if st.button("🗑️ Clear Knowledge Base"):
             st.session_state.rag_core.clear_vectorstore()
             st.session_state.messages = []
             st.session_state.processed_documents = []
+            st.session_state.processed_urls = []
             st.session_state.qa_chain_needs_rebuild = True
             st.success("Knowledge base cleared")
         
         st.divider()
         
         # Show loaded documents
-        if st.session_state.processed_documents:
-            st.header("📄 Loaded Documents")
-            for doc_name in st.session_state.processed_documents:
-                st.markdown(f"📄 {doc_name}")
+        st.header("📄 Loaded Sources")
+        
+        if st.session_state.processed_documents or st.session_state.processed_urls:
+            if st.session_state.processed_documents:
+                st.markdown("**Documents:**")
+                for doc_name in st.session_state.processed_documents:
+                    st.markdown(f"📄 {doc_name}")
+            
+            if st.session_state.processed_urls:
+                st.markdown("**URLs:**")
+                for url in st.session_state.processed_urls:
+                    # Display shortened URL
+                    short_url = url[:50] + "..." if len(url) > 50 else url
+                    st.markdown(f"🌐 {short_url}")
         else:
-            st.header("📄 Loaded Documents")
-            st.caption("No documents loaded")
+            st.caption("No sources loaded")
         
         # Clear chat history
         if st.button("💬 Clear Chat History"):
@@ -221,11 +274,33 @@ def main():
             if message["role"] == "assistant" and "sources" in message:
                 with st.expander("📖 View Sources"):
                     for i, source in enumerate(message["sources"], 1):
-                        # Extract page number from metadata if available
-                        page_num = source['metadata'].get('page', 'N/A')
-                        st.markdown(f"<span class='page-badge'>Page {page_num}</span> **Source {i}:**", unsafe_allow_html=True)
-                        st.text(source["content"])
-                        st.caption(f"Metadata: {source['metadata']}")
+                        metadata = source['metadata']
+                        
+                        # Check source type and display accordingly
+                        source_type = metadata.get('source_type', 'document')
+                        
+                        if source_type == 'url':
+                            # URL source display
+                            url = metadata.get('url', 'Unknown URL')
+                            domain = metadata.get('domain', 'Unknown')
+                            title = metadata.get('original_title', domain)
+                            short_url = url[:60] + "..." if len(url) > 60 else url
+                            
+                            st.markdown(f"<span class='page-badge'>🌐 URL</span> **Source {i}:**", unsafe_allow_html=True)
+                            st.markdown(f"**{title}**")
+                            st.caption(f"From: {short_url}")
+                            st.text(source["content"])
+                            st.caption(f"Domain: {domain} | Fetched: {metadata.get('fetch_time', 'N/A')[:10]}")
+                        else:
+                            # Document source display
+                            page_num = metadata.get('page', 'N/A')
+                            source_name = metadata.get('source', 'Unknown')
+                            
+                            st.markdown(f"<span class='page-badge'>📄 Doc</span> **Source {i}:**", unsafe_allow_html=True)
+                            st.markdown(f"**{source_name}**")
+                            st.text(source["content"])
+                            st.caption(f"Page: {page_num}")
+                        
                         st.divider()
     
     # Chat input
@@ -261,11 +336,33 @@ def main():
                     if result["sources"]:
                         with st.expander("📖 View Sources"):
                             for i, source in enumerate(result["sources"], 1):
-                                # Extract page number from metadata if available
-                                page_num = source['metadata'].get('page', 'N/A')
-                                st.markdown(f"<span class='page-badge'>Page {page_num}</span> **Source {i}:**", unsafe_allow_html=True)
-                                st.text(source["content"])
-                                st.caption(f"Metadata: {source['metadata']}")
+                                metadata = source['metadata']
+                                
+                                # Check source type and display accordingly
+                                source_type = metadata.get('source_type', 'document')
+                                
+                                if source_type == 'url':
+                                    # URL source display
+                                    url = metadata.get('url', 'Unknown URL')
+                                    domain = metadata.get('domain', 'Unknown')
+                                    title = metadata.get('original_title', domain)
+                                    short_url = url[:60] + "..." if len(url) > 60 else url
+                                    
+                                    st.markdown(f"<span class='page-badge'>🌐 URL</span> **Source {i}:**", unsafe_allow_html=True)
+                                    st.markdown(f"**{title}**")
+                                    st.caption(f"From: {short_url}")
+                                    st.text(source["content"])
+                                    st.caption(f"Domain: {domain} | Fetched: {metadata.get('fetch_time', 'N/A')[:10]}")
+                                else:
+                                    # Document source display
+                                    page_num = metadata.get('page', 'N/A')
+                                    source_name = metadata.get('source', 'Unknown')
+                                    
+                                    st.markdown(f"<span class='page-badge'>📄 Doc</span> **Source {i}:**", unsafe_allow_html=True)
+                                    st.markdown(f"**{source_name}**")
+                                    st.text(source["content"])
+                                    st.caption(f"Page: {page_num}")
+                                
                                 st.divider()
                     
                 except Exception as e:

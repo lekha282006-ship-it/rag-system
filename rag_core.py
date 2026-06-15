@@ -12,6 +12,7 @@ from langchain_community.retrievers import BM25Retriever
 from langchain.retrievers import EnsembleRetriever
 from langchain.schema import BaseRetriever, Document
 from sentence_transformers import CrossEncoder
+from url_ingestion import ingest_urls, validate_url
 
 
 # Cached functions for expensive operations
@@ -124,6 +125,7 @@ class RAGCore:
         self.qa_chain = None
         self.llm = Ollama(model="llama2")  # or "mistral", "codellama", etc.
         self.document_chunks = []  # Track all document chunks for BM25
+        self.processed_urls = set()  # Track processed URLs to avoid duplicates
         
     def ingest_pdf(self, pdf_path: str, vectorstore=None) -> None:
         """Load and ingest a PDF document into the vector store.
@@ -242,6 +244,56 @@ Answer:"""
             "sources": sources
         }
     
+    def ingest_urls(self, urls_list: List[str]) -> dict:
+        """Ingest web URLs into the vector store.
+        
+        Args:
+            urls_list: List of URLs to ingest
+            
+        Returns:
+            Dictionary with processing results
+        """
+        if not urls_list:
+            return {'success': [], 'failed': [], 'skipped': [], 'total_chunks': 0}
+        
+        # Validate URLs
+        valid_urls = []
+        for url in urls_list:
+            if validate_url(url):
+                valid_urls.append(url)
+            else:
+                print(f"Invalid URL skipped: {url}")
+        
+        if not valid_urls:
+            return {'success': [], 'failed': [], 'skipped': urls_list, 'total_chunks': 0}
+        
+        # Process URLs using the url_ingestion module
+        results = ingest_urls(valid_urls, self.processed_urls)
+        
+        # Add documents to vector store
+        if results['all_documents']:
+            if self.vectorstore is None:
+                self.vectorstore = Chroma.from_documents(
+                    documents=results['all_documents'],
+                    embedding=self.embeddings,
+                    persist_directory=self.persist_directory
+                )
+            else:
+                self.vectorstore.add_documents(results['all_documents'])
+            
+            # Track chunks for BM25
+            self.document_chunks.extend(results['all_documents'])
+            
+            # Persist to disk
+            self.vectorstore.persist()
+            
+            # Invalidate QA chain cache since documents changed
+            self.qa_chain = None
+            
+            print(f"Successfully ingested {results['total_chunks']} chunks from {len(results['success'])} URLs")
+        
+        return results
+    
     def clear_vectorstore(self) -> None:
         """Clear the vector store and delete persisted data."""
         if os.path.exists(self.persist_directory):
@@ -251,5 +303,6 @@ Answer:"""
         self.vectorstore = None
         self.qa_chain = None
         self.document_chunks = []
+        self.processed_urls = set()
         # Clear the cached vectorstore
         load_vectorstore.clear()
