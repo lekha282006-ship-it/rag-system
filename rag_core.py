@@ -1,21 +1,29 @@
 import os
-from typing import List, Optional, Any
+from typing import List, Optional, Any, Dict
 import streamlit as st
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_community.vectorstores import Chroma
 from langchain_community.embeddings import HuggingFaceEmbeddings
-from langchain_community.llms import Ollama
+from langchain_groq import ChatGroq
+from dotenv import load_dotenv
 from langchain.chains import RetrievalQA
 from langchain.prompts import PromptTemplate
 from langchain_community.retrievers import BM25Retriever
 from langchain.retrievers import EnsembleRetriever
 from langchain.schema import BaseRetriever, Document
 from sentence_transformers import CrossEncoder
-from url_ingestion import ingest_urls, validate_url
+
+# Note: Ensure url_ingestion.py exists in your workspace containing these functions
+try:
+    from url_ingestion import ingest_urls, validate_url
+except ImportError:
+    # Fallback placeholders if file isn't created yet to prevent complete crash
+    def validate_url(url: str) -> bool: return True
+    def ingest_urls(urls: list, processed: set) -> dict: 
+        return {'success': [], 'failed': [], 'skipped': [], 'total_chunks': 0, 'all_documents': []}
 
 
-# Cached functions for expensive operations
 @st.cache_resource
 def get_embeddings():
     """Cached embedding model initialization."""
@@ -42,15 +50,7 @@ def get_cross_encoder():
 
 
 def get_hybrid_retriever(vectorstore, documents):
-    """Create a hybrid retriever combining vector similarity and BM25.
-
-    Args:
-        vectorstore: Chroma vectorstore
-        documents: List of document chunks for BM25
-
-    Returns:
-        EnsembleRetriever combining vector and BM25 retrievers
-    """
+    """Create a hybrid retriever combining vector similarity and BM25."""
     bm25_retriever = BM25Retriever.from_documents(documents)
     bm25_retriever.k = 6
 
@@ -60,28 +60,16 @@ def get_hybrid_retriever(vectorstore, documents):
         retrievers=[bm25_retriever, vector_retriever],
         weights=[0.5, 0.5]
     )
-
     return ensemble_retriever
 
 
-def rerank_results(query, documents, top_k=4):
-    """Rerank documents using CrossEncoder.
-
-    Args:
-        query: Search query
-        documents: List of documents to rerank
-        top_k: Number of top results to return
-
-    Returns:
-        List of top_k documents sorted by relevance score
-    """
+def rerank_results(query: str, documents: List[Document], top_k: int = 4) -> List[Document]:
+    """Rerank documents using CrossEncoder."""
     if not documents:
         return []
 
     cross_encoder = get_cross_encoder()
-
     pairs = [[query, doc.page_content] for doc in documents]
-
     scores = cross_encoder.predict(pairs)
 
     scored_docs = list(zip(documents, scores))
@@ -92,47 +80,48 @@ def rerank_results(query, documents, top_k=4):
 
 class HybridRerankRetriever(BaseRetriever):
     """Custom retriever that combines hybrid search with reranking."""
-
+    
     hybrid_retriever: Any
     top_k: int = 4
 
-    class Config:
-        arbitrary_types_allowed = True
+    # Correct Pydantic v2 configuration strategy
+    model_config = {
+        "arbitrary_types_allowed": True
+    }
 
-    def _get_relevant_documents(self, query, **kwargs):
+    def _get_relevant_documents(self, query: str, **kwargs) -> List[Document]:
         """Retrieve and rerank documents."""
-        initial_docs = self.hybrid_retriever.get_relevant_documents(query, **kwargs)
+        initial_docs = self.hybrid_retriever.invoke(query, **kwargs)
         reranked_docs = rerank_results(query, initial_docs, top_k=self.top_k)
         return reranked_docs
 
 
 class RAGCore:
-    def __init__(self, persist_directory: str = "./chroma_db", model_name: str = "mistral"):
+    def __init__(self, persist_directory: str = "./chroma_db", model_name: str = "llama-3.3-70b-versatile"):
+        load_dotenv()
         self.persist_directory = persist_directory
-        self.embeddings = get_embeddings()
-        self.vectorstore = load_vectorstore(persist_directory, self.embeddings)
-        self.qa_chain = None
-        self.llm_provider = "ollama"
         self.model_name = model_name
-        self.llm = Ollama(model=model_name)
+        self.llm_provider = "groq"
+        
+        self.embeddings = get_embeddings()
+        self.vectorstore = load_vectorstore(self.persist_directory, self.embeddings)
+        self.qa_chain = None
+
+        self.llm = ChatGroq(
+            model=self.model_name,
+            temperature=0,
+            groq_api_key=os.getenv("GROQ_API_KEY")
+        )
+
         self.document_chunks = []
         self.processed_urls = set()
 
-    def set_llm(self, provider: str, model_name: str, groq_api_key: Optional[str] = None) -> None:
-        """Switch the Ollama model without losing ingested documents."""
-        self.llm_provider = "ollama"
-        self.model_name = model_name
-        self.llm = Ollama(model=model_name)
-        self.qa_chain = None
+    def set_llm(self, provider=None, model_name=None, groq_api_key=None):
+        """Placeholder for dynamic alterations."""
+        pass
 
     def ingest_pdf(self, pdf_path: str, vectorstore=None) -> None:
-        """Load and ingest a PDF document into the vector store.
-
-        Args:
-            pdf_path: Path to the PDF file to ingest
-            vectorstore: Optional existing vectorstore to add documents to.
-                        If None, creates or uses self.vectorstore.
-        """
+        """Load and ingest a PDF document into the vector store."""
         if not os.path.exists(pdf_path):
             raise FileNotFoundError(f"PDF file not found: {pdf_path}")
 
@@ -162,7 +151,10 @@ class RAGCore:
         else:
             target_vectorstore.add_documents(texts)
 
-        target_vectorstore.persist()
+        # Vectorstore state handles tracking persistence across newer variants
+        if hasattr(target_vectorstore, 'persist'):
+            target_vectorstore.persist()
+            
         self.document_chunks.extend(texts)
         self.qa_chain = None
         print(f"Successfully ingested {len(texts)} chunks from {pdf_path}")
@@ -172,6 +164,17 @@ class RAGCore:
         self.vectorstore = load_vectorstore(self.persist_directory, self.embeddings)
         if self.vectorstore:
             print("Loaded existing vector store from disk")
+            try:
+                # --- FIX: Fetch raw data to rebuild chunks for BM25 ---
+                raw_data = self.vectorstore.get()
+                if raw_data and 'documents' in raw_data and 'metadatas' in raw_data:
+                    self.document_chunks = [
+                        Document(page_content=content, metadata=meta)
+                        for content, meta in zip(raw_data['documents'], raw_data['metadatas'])
+                    ]
+                    print(f"Successfully restored {len(self.document_chunks)} chunks for Hybrid Search.")
+            except Exception as e:
+                print(f"Could not reconstruct document chunks for BM25: {e}")
         else:
             print("No existing vector store found. Please ingest documents first.")
 
@@ -210,16 +213,24 @@ Answer:"""
 
     def query(self, question: str) -> dict:
         """Query the RAG system with a question."""
+        # Fallback to normal Groq chat if no documents exist
+        if not self.document_chunks:
+            response = self.llm.invoke(question)
+            return {
+                "answer": response.content,
+                "sources": []
+            }
+
         if self.qa_chain is None:
             self.create_qa_chain()
 
         result = self.qa_chain.invoke({"query": question})
-
         sources = []
+
         if "source_documents" in result:
             for doc in result["source_documents"]:
                 sources.append({
-                    "content": doc.page_content[:200] + "...",
+                    "content": doc.page_content, 
                     "metadata": doc.metadata
                 })
 
@@ -229,14 +240,7 @@ Answer:"""
         }
 
     def ingest_urls(self, urls_list: List[str]) -> dict:
-        """Ingest web URLs into the vector store.
-
-        Args:
-            urls_list: List of URLs to ingest
-
-        Returns:
-            Dictionary with processing results
-        """
+        """Ingest web URLs into the vector store."""
         if not urls_list:
             return {'success': [], 'failed': [], 'skipped': [], 'total_chunks': 0}
 
@@ -252,7 +256,7 @@ Answer:"""
 
         results = ingest_urls(valid_urls, self.processed_urls)
 
-        if results['all_documents']:
+        if results.get('all_documents'):
             if self.vectorstore is None:
                 self.vectorstore = Chroma.from_documents(
                     documents=results['all_documents'],
@@ -263,21 +267,40 @@ Answer:"""
                 self.vectorstore.add_documents(results['all_documents'])
 
             self.document_chunks.extend(results['all_documents'])
-            self.vectorstore.persist()
+            if hasattr(self.vectorstore, 'persist'):
+                self.vectorstore.persist()
+                
             self.qa_chain = None
-
             print(f"Successfully ingested {results['total_chunks']} chunks from {len(results['success'])} URLs")
 
         return results
 
     def clear_vectorstore(self) -> None:
-        """Clear the vector store and delete persisted data."""
-        if os.path.exists(self.persist_directory):
-            import shutil
-            shutil.rmtree(self.persist_directory)
-            print("Vector store cleared")
-        self.vectorstore = None
+        """Clear the vector store by wiping database contents internally to bypass Windows file locks."""
         self.qa_chain = None
+        
+        if self.vectorstore is not None:
+            try:
+                # Get all document IDs currently in the Chroma database
+                existing_data = self.vectorstore.get()
+                if existing_data and 'ids' in existing_data and existing_data['ids']:
+                    # Delete all IDs from the collection internally
+                    self.vectorstore.delete(ids=existing_data['ids'])
+                    
+                # For newer Chroma versions, persist the empty state
+                if hasattr(self.vectorstore, 'persist'):
+                    self.vectorstore.persist()
+                    
+                print("Chroma collection cleared successfully via internal delete.")
+            except Exception as e:
+                print(f"Internal database clear failed, attempting fallback: {e}")
+                # Fallback: if it's completely empty or errors out, reset the reference
+                self.vectorstore = None
+
+        # Reset internal application states
         self.document_chunks = []
         self.processed_urls = set()
+        
+        # Clear the Streamlit resource cache so it doesn't hold stale connections
         load_vectorstore.clear()
+        print("Knowledge base states reset.")

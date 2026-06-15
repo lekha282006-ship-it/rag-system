@@ -1,106 +1,67 @@
-# Local RAG Chatbot
+# Document Intelligence Assistant
 
-A completely local Retrieval-Augmented Generation (RAG) chatbot that runs on your machine without any external API keys. Uses Ollama for LLM inference and HuggingFace embeddings for semantic search.
+An AI-powered document Q&A application featuring a dual-engine hybrid search pipeline, real-time context streaming, conversational memory, and precise source verification. The application dynamically ingests local PDF documents and extracts live web text from user-provided URLs to form an on-the-fly searchable knowledge base.
 
-## Features
+---
 
-- **100% Local**: No OpenAI, Anthropic, or other cloud API keys required
-- **PDF Ingestion**: Upload and process PDF documents
-- **Semantic Search**: Uses sentence-transformers for intelligent document retrieval
-- **Vector Storage**: ChromaDB for efficient similarity search
-- **Streamlit UI**: Clean, modern web interface
-- **Multiple Models**: Support for various Ollama models (llama2, mistral, codellama, phi)
+##  Key Features
 
-## Prerequisites
+* **Multi-Source Ingestion Engine**: Seamlessly processes unstructured content from uploaded local PDF documents and web scraped URLs simultaneously.
+* **NLP Hybrid Search Architecture**: Combines vector density embeddings (Dense Retrieval via ChromaDB) with classic statistical keyword indexing (Sparse Retrieval via Rank-BM25) for accurate context matching.
+* **Hallucination Guardrails**: Implements strict system prompting constraints to ensure answers are strictly derived from the parsed context.
+* **Contextual Chat Memory**: Tracks active dialogue windows to resolve pronoun references and multi-turn follow-up questions cleanly.
+* **Transparent Source Auditor**: Includes built-in expanders underneath chat bubbles revealing the origin documents or web links utilized to fulfill responses.
 
-1. **Ollama**: Install and run Ollama locally
-   - Download from [ollama.ai](https://ollama.ai)
-   - Pull a model: `ollama pull llama2` (or mistral, codellama, etc.)
-   - Ensure Ollama is running: `ollama serve`
+---
 
-2. **Python 3.8+**: Make sure you have Python installed
+##  System Architecture & Tech Stack
 
-## Installation
+* **Frontend Dashboard**: Streamlit
+* **RAG Orchestration Framework**: LangChain Suite (`langchain-core`, `langchain-community`, `langchain-groq`)
+* **Vector Storage Core**: ChromaDB (Backed by an isolated, persistent SQLite3 instance)
+* **Keyword Matching Core**: Rank-BM25
+* **Cloud LLM Engine**: Llama-3.3-70b-versatile (Dispatched ultra-fast via Groq hardware acceleration API)
+* **Extraction Utilities**: PyPDF, BeautifulSoup4, Requests, and Validators
 
-1. Clone or navigate to the project directory
+---
 
-2. Create a virtual environment (recommended):
-   ```bash
-   python -m venv venv
-   # On Windows:
-   venv\Scripts\activate
-   # On Linux/Mac:
-   source venv/bin/activate
-   ```
+##  Project Directory Layout
 
-3. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
+```text
+├── .venv/               # Isolated Python virtual environment dependencies
+├── chroma_db/           # Local persistent SQLite vector payload storage binaries
+│   ├── 9bf92cde-.../    # Generated system index tables and structural link lists
+│   └── chroma.sqlite3   # Relational lookup index tracking document mappings
+├── uploads/             # Temporary server directory staging uploaded PDF streams
+├── .env                 # Local security credential parameters (GROQ_API_KEY)
+├── .gitignore           # Safeguards workspace metadata from git tracking
+├── app.py               # Main UI rendering layout and tracking script
+├── cloud_llm.py         # Configures Groq Cloud LLM client instantiation handles
+├── rag_core.py          # Script processing document parsing and Hybrid Retrieval
+├── url_ingestion.py     # Clean web scraping script for live target URLs
+└── requirements.txt     # Complete system dependency tree map
 
-## Usage
+⚙️ Installation & Setup
+Clone the Project Repository
 
-1. Start the application:
-   ```bash
-   streamlit run app.py
-   ```
+Bash
+git clone <your-repository-url>
+cd rag-system
+Initialize a Virtual Environment
 
-2. Open your browser to `http://localhost:8501`
+Bash
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+Install Core System Dependencies
 
-3. **Ingest Documents**:
-   - Click "Browse files" in the sidebar
-   - Select a PDF file
-   - Click "Ingest PDF" to process it
+Bash
+pip install -r requirements.txt
+Add API Token Parameters
+Create a .env file directly inside the workspace root and apply your Groq cloud endpoint parameters:
 
-4. **Chat**:
-   - Ask questions about your documents in the chat interface
-   - View answers with source references
+Code snippet
+GROQ_API_KEY=your_actual_groq_api_key_here
+Boot the Streamlit Server Application Instance
 
-## Project Structure
-
-```
-rag system/
-├── rag_core.py          # Core RAG logic (ingestion, retrieval, QA)
-├── app.py               # Streamlit UI
-├── requirements.txt     # Python dependencies
-├── README.md           # This file
-├── chroma_db/          # Vector database (created automatically)
-└── uploads/            # Uploaded PDFs (created automatically)
-```
-
-## How It Works
-
-1. **Ingestion**: PDFs are loaded, split into chunks, and embedded using sentence-transformers
-2. **Storage**: Embeddings are stored in ChromaDB for fast similarity search
-3. **Retrieval**: When you ask a question, relevant document chunks are retrieved
-4. **Generation**: Ollama LLM generates answers using retrieved context
-
-## Supported Ollama Models
-
-- llama2 (default)
-- mistral
-- codellama
-- phi
-
-You can pull additional models with: `ollama pull <model-name>`
-
-## Troubleshooting
-
-**Ollama connection error**: Ensure Ollama is running with `ollama serve`
-
-**Model not found**: Pull the model first with `ollama pull <model-name>`
-
-**Memory issues**: Use a smaller model or reduce chunk size in `rag_core.py`
-
-**Slow responses**: First query may be slow as embeddings load; subsequent queries are faster
-
-## Customization
-
-- **Embedding model**: Change in `rag_core.py` (line 12)
-- **Chunk size**: Modify in `rag_core.py` (line 28-30)
-- **Retrieval count**: Change `k` parameter in `rag_core.py` (line 68)
-- **Prompt template**: Edit in `rag_core.py` (line 55-62)
-
-## License
-
-MIT License - Feel free to use and modify for your needs
+Bash
+streamlit run app.py

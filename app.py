@@ -43,8 +43,14 @@ def main():
         border-left: 3px solid #2563EB;
         border-radius: 8px;
     }
-    .css-1d391kg { background-color: #1E293B; }
-    .css-1d391kg .stHeader { color: #2563EB; }
+    [data-testid="stSidebar"] { 
+        background-color: #1E293B; 
+    }
+    [data-testid="stSidebar"] h1, 
+    [data-testid="stSidebar"] h2, 
+    [data-testid="stSidebar"] .stMarkdown h3 { 
+        color: #2563EB; 
+    }
     .stButton > button {
         background-color: #2563EB;
         color: white;
@@ -199,28 +205,15 @@ def main():
 
         st.markdown(f"<span style='display:inline-block; width:10px; height:10px; background-color:{status_color}; border-radius:50%; margin-right:8px;'></span>**Status:** {'Documents Loaded' if status_color == 'green' else 'No Documents'}", unsafe_allow_html=True)
         st.markdown(f"**Document Chunks:** {chunk_count}")
-        st.markdown(f"**Current Model:** {st.session_state.rag_core.model_name} (ollama)")
+        st.markdown(f"**Current Model:** {st.session_state.rag_core.model_name} (Groq)")
 
         st.divider()
 
         st.header("⚙️ Settings")
 
-        model_options = ["mistral", "llama2", "codellama", "phi"]
-        default_index = model_options.index(st.session_state.rag_core.model_name) if st.session_state.rag_core.model_name in model_options else 0
-        selected_model = st.selectbox(
-            "Select Ollama Model",
-            model_options,
-            index=default_index,
-            help="Choose the local LLM model. Mistral recommended for best quality."
-        )
 
-        if selected_model != st.session_state.rag_core.model_name:
-            try:
-                st.session_state.rag_core.set_llm("ollama", selected_model, None)
-                st.session_state.qa_chain_needs_rebuild = True
-                st.info(f"Switched to {selected_model}")
-            except Exception as e:
-                st.error(f"Could not switch model: {str(e)}")
+        st.success("🚀 Using Groq Cloud")
+        st.caption("Model: llama-3.3-70b-versatile")
 
         st.divider()
 
@@ -232,8 +225,8 @@ def main():
         4. View answers with source references
 
         ### Requirements:
-        - Ollama must be running locally
-        - Recommended: `ollama pull mistral`
+- Internet connection required
+- GROQ_API_KEY configured in `.env`
         """)
 
     # Main chat interface
@@ -258,7 +251,9 @@ def main():
                             st.markdown(f"<span class='page-badge'>🌐 URL</span> **Source {i}:**", unsafe_allow_html=True)
                             st.markdown(f"**{title}**")
                             st.caption(f"From: {short_url}")
-                            st.text(source["content"])
+                             # Shows a clean preview snippet inside the UI expander element
+                            preview_text = source["content"][:300] + "..." if len(source["content"]) > 300 else source["content"]
+                            st.text(preview_text)
                             st.caption(f"Domain: {domain} | Fetched: {metadata.get('fetch_time', 'N/A')[:10]}")
                         else:
                             page_num = metadata.get('page', 'N/A')
@@ -283,9 +278,9 @@ def main():
                     if st.session_state.qa_chain_needs_rebuild:
                         st.session_state.rag_core.qa_chain = None
                         st.session_state.qa_chain_needs_rebuild = False
-
+                        
                     result = st.session_state.rag_core.query(prompt)
-
+                
                     st.markdown(result["answer"])
 
                     assistant_message = {
