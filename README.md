@@ -1,67 +1,135 @@
-# Document Intelligence Assistant
+# 📄 Document Intelligence Assistant
 
-An AI-powered document Q&A application featuring a dual-engine hybrid search pipeline, real-time context streaming, conversational memory, and precise source verification. The application dynamically ingests local PDF documents and extracts live web text from user-provided URLs to form an on-the-fly searchable knowledge base.
-
----
-
-##  Key Features
-
-* **Multi-Source Ingestion Engine**: Seamlessly processes unstructured content from uploaded local PDF documents and web scraped URLs simultaneously.
-* **NLP Hybrid Search Architecture**: Combines vector density embeddings (Dense Retrieval via ChromaDB) with classic statistical keyword indexing (Sparse Retrieval via Rank-BM25) for accurate context matching.
-* **Hallucination Guardrails**: Implements strict system prompting constraints to ensure answers are strictly derived from the parsed context.
-* **Contextual Chat Memory**: Tracks active dialogue windows to resolve pronoun references and multi-turn follow-up questions cleanly.
-* **Transparent Source Auditor**: Includes built-in expanders underneath chat bubbles revealing the origin documents or web links utilized to fulfill responses.
+An AI-powered **Document Question Answering (Q&A) system** featuring a multi-stage hybrid retrieval pipeline, cross-encoder reranking, conversational flexibility, and source transparency. The application dynamically ingests local PDF documents and extracts live web content from user-provided URLs to build an on-the-fly searchable knowledge base.
 
 ---
 
-##  System Architecture & Tech Stack
+## 🚀 Key Features
 
-* **Frontend Dashboard**: Streamlit
-* **RAG Orchestration Framework**: LangChain Suite (`langchain-core`, `langchain-community`, `langchain-groq`)
-* **Vector Storage Core**: ChromaDB (Backed by an isolated, persistent SQLite3 instance)
-* **Keyword Matching Core**: Rank-BM25
-* **Cloud LLM Engine**: Llama-3.3-70b-versatile (Dispatched ultra-fast via Groq hardware acceleration API)
-* **Extraction Utilities**: PyPDF, BeautifulSoup4, Requests, and Validators
+### 🌐 Multi-Source Ingestion Engine
+Seamlessly processes unstructured content from uploaded PDF documents and live web pages simultaneously, enabling unified information retrieval across multiple data sources.
+
+### 🧠 Advanced Hybrid Retrieval & Reranking Architecture
+Combines a multi-tiered retrieval network to ensure pinpoint context accuracy:
+* **Dense Retrieval:** Semantic vector search using HuggingFace sentence embeddings stored in **ChromaDB**.
+* **Sparse Retrieval:** Keyword-matched index tracking utilizing **Rank-BM25**.
+* **Ensemble Blending:** Combines sparse and dense outputs using an **EnsembleRetriever** (50/50 weighted split).
+* **Deep Reranking:** Filters and optimizes the top retrieved contexts using a **Cross-Encoder model** (`ms-marco-MiniLM-L-6-v2`) before passing payloads to the LLM.
+
+### 🛡️ Dynamic Guardrails & Chat Flexibility
+Implements an intelligent hybrid prompt design. When documents are active, strict boundaries prevent hallucinations. If the knowledge base is cleared, the system automatically falls back to an open, conversational general-knowledge assistant.
+
+### 💬 Contextual Chat Memory
+Maintains active dialogue history to resolve pronoun references and support coherent multi-turn conversations.
+
+### 📖 Transparent Source Verification
+Displays expandable source sections beneath responses, allowing users to inspect the original text chunks, page numbers, or live web links used to generate answers.
 
 ---
 
-##  Project Directory Layout
+# 🛠️ System Architecture & Tech Stack
+
+| Component                | Technology                                                            |
+| ------------------------ | --------------------------------------------------------------------- |
+| Frontend Dashboard       | Streamlit                                                             |
+| RAG Framework            | LangChain (`langchain-core`, `langchain-community`, `langchain-groq`) |
+| Vector Database          | ChromaDB                                                              |
+| Keyword Retrieval Engine | Rank-BM25                                                             |
+| Deep Reranking Node      | Sentence-Transformers Cross-Encoder (`ms-marco-MiniLM-L-6-v2`)        |
+| LLM Backend              | Llama-3.3-70B-Versatile via Groq API                                  |
+| PDF Processing           | PyPDF Loader                                                          |
+| Web Content Extraction   | BeautifulSoup4, Requests                                              |
+| URL Validation           | Validators                                                            |
+| Persistent Storage       | SQLite3 (Chroma Core backend Engine)                                  |
+
+---
+
+# 📁 Project Structure
 
 ```text
-├── .venv/               # Isolated Python virtual environment dependencies
-├── chroma_db/           # Local persistent SQLite vector payload storage binaries
-│   ├── 9bf92cde-.../    # Generated system index tables and structural link lists
-│   └── chroma.sqlite3   # Relational lookup index tracking document mappings
-├── uploads/             # Temporary server directory staging uploaded PDF streams
-├── .env                 # Local security credential parameters (GROQ_API_KEY)
-├── .gitignore           # Safeguards workspace metadata from git tracking
-├── app.py               # Main UI rendering layout and tracking script
-├── cloud_llm.py         # Configures Groq Cloud LLM client instantiation handles
-├── rag_core.py          # Script processing document parsing and Hybrid Retrieval
-├── url_ingestion.py     # Clean web scraping script for live target URLs
-└── requirements.txt     # Complete system dependency tree map
+├── .venv/               # Isolated Python virtual environment
+├── chroma_db/           # Persistent vector database (Git Ignored)
+│   └── chroma.sqlite3
+├── uploads/             # Temporary PDF storage (Git Ignored)
+├── .env                 # Environment variables / API Keys (Git Ignored)
+├── .gitignore           # Repository file filter configuration
+├── app.py               # Streamlit user interface & state coordinator
+├── cloud_llm_handler.py # Groq LLM client & token tracking configuration
+├── rag_core.py          # Hybrid retrieval, reranking, and orchestrator logic
+├── url_ingestion.py     # Web scraping and URL content extraction
+└── requirements.txt     # Project dependencies
+
 
 ⚙️ Installation & Setup
-Clone the Project Repository
+Follow these steps to set up and run the application locally.
 
+1. Clone the Repository
 Bash
 git clone <your-repository-url>
 cd rag-system
-Initialize a Virtual Environment
-
+2. Create a Virtual Environment
 Bash
 python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-Install Core System Dependencies
+Activate the environment
+Windows
 
 Bash
+.venv\Scripts\activate
+macOS/Linux
+
+Bash
+source .venv/bin/activate
+3. Install Dependencies
+Bash
 pip install -r requirements.txt
-Add API Token Parameters
-Create a .env file directly inside the workspace root and apply your Groq cloud endpoint parameters:
+4. Configure Environment Variables
+Create a file named .env in the project root directory and add your Groq API key:
 
 Code snippet
-GROQ_API_KEY=your_actual_groq_api_key_here
-Boot the Streamlit Server Application Instance
+GROQ_API_KEY=gsk_your_actual_groq_api_key_here
+Note: The .gitignore file completely prevents sensitive credentials from being pushed to GitHub.
+
+5. Launch the Application
+Start the Streamlit server:
 
 Bash
 streamlit run app.py
+The application will launch on your local host and automatically open in your default web browser.
+
+PDF Documents                  Web Content URLs
+             │                               │
+             ▼                               ▼
+       PyPDF Loader                  BeautifulSoup4
+             │                               │
+             └───────────────┬───────────────┘
+                             │
+                             ▼
+               Recursive Character Splitter
+                     (1000 size / 200 overlap)
+                             │
+                             ▼
+               ┌───────────────────────────┐
+               │  Hybrid Parallel Search   │
+               ├───────────────────────────┤
+               │ Dense: ChromaDB Vector    │
+               │ Sparse: BM25 Keywords     │
+               └─────────────┬─────────────┘
+                             │
+                             ▼
+                     Ensemble Retriever
+                        (50/50 Blend)
+                             │
+                             ▼
+                 Cross-Encoder Reranker
+               (ms-marco-MiniLM Top-4 Selection)
+                             │
+                             ▼
+                Groq Llama-3.3-70B Inference
+               (Context-Constrained Prompting)
+                             │
+                             ▼
+           Verified Response + Source Attribution
+
+
+
+This project is intended for educational and research purposes.

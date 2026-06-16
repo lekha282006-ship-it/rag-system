@@ -1,6 +1,6 @@
 """
 Cloud LLM Handler for Groq API.
-Fast cloud inference with usage tracking.
+Fast cloud inference with usage tracking and dynamic context/conversational fallbacks.
 """
 
 import os
@@ -26,15 +26,17 @@ class CloudLLMHandler:
     ):
         self.model = model
 
+        # Securely fetch API Key from the .env file
         api_key = os.getenv("GROQ_API_KEY")
 
         if not api_key:
             raise ValueError(
-                "GROQ_API_KEY not found in .env file"
+                "GROQ_API_KEY not found in .env file. Please check your setup."
             )
 
         self.client = Groq(api_key=api_key)
 
+        # Usage and Token Metric Monitoring
         self.total_requests = 0
         self.total_input_tokens = 0
         self.total_output_tokens = 0
@@ -42,40 +44,51 @@ class CloudLLMHandler:
         logger.info(f"CloudLLMHandler initialized with model: {model}")
 
     def count_tokens(self, text: str) -> int:
+        """Fallback character-based heuristic tool to approximate token counts if API fields drop."""
         return max(1, len(text) // 4)
 
     def generate_response(
         self,
         query: str,
-        context: str,
+        context: Optional[str] = None,
         system_prompt: Optional[str] = None
     ) -> Dict[str, Any]:
 
         if not query:
             raise ValueError("Query cannot be empty")
 
+        # Clean/strip context safely if provided as an empty string or None
+        cleaned_context = context.strip() if context else ""
+
+        # DYNAMIC SYSTEM PROMPT ROUTER:
+        # If a custom prompt is provided by rag_core, use it.
+        # Otherwise, dynamically pick between strict RAG mode and General Chat mode!
         if system_prompt is None:
-            system_prompt = """
-You are a helpful AI assistant.
-
+            if cleaned_context:
+                # Document context is active -> enforce strict boundary limits
+                system_prompt = """You are a helpful AI assistant.
 Answer ONLY using the provided context.
-
 If the answer is not in the context, clearly say:
-'I could not find this information in the provided sources.'
-"""
+'I could not find this information in the provided sources.'"""
+            else:
+                # No documents loaded -> Allow natural general-knowledge chat behaviors
+                system_prompt = """You are a helpful, versatile AI assistant. 
+Answer the user's questions clearly, naturally, and accurately using your broad, general knowledge space."""
 
-        prompt = f"""
-Context:
-{context}
+        # Package the prompt structure intelligently based on context state
+        if cleaned_context:
+            prompt = f"""Context:
+{cleaned_context}
 
 Question:
-{query}
-"""
+{query}"""
+        else:
+            prompt = query
 
         start_time = datetime.now()
 
         try:
-
+            # Dispatch structural payload to Groq API infrastructure
             response = self.client.chat.completions.create(
                 model=self.model,
                 temperature=0.3,
@@ -93,6 +106,7 @@ Question:
 
             response_text = response.choices[0].message.content
 
+            # Track payload stats via native API tracking parameters
             input_tokens = getattr(
                 response.usage,
                 "prompt_tokens",
@@ -105,6 +119,7 @@ Question:
                 self.count_tokens(response_text)
             )
 
+            # Commit local increments to active handler tracking registers
             self.total_requests += 1
             self.total_input_tokens += input_tokens
             self.total_output_tokens += output_tokens
@@ -119,11 +134,11 @@ Question:
             }
 
         except Exception as e:
-            logger.error(f"Groq API error: {str(e)}")
+            logger.error(f"Groq API error encountered: {str(e)}")
             raise
 
     def get_usage_stats(self) -> Dict[str, Any]:
-
+        """Returns usage analysis figures for the application's sidebar system state layout monitor."""
         return {
             "total_requests": self.total_requests,
             "total_input_tokens": self.total_input_tokens,
@@ -139,6 +154,7 @@ Question:
         }
 
     def reset_usage_stats(self):
+        """Resets structural usage logs back to 0."""
         self.total_requests = 0
         self.total_input_tokens = 0
         self.total_output_tokens = 0

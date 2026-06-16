@@ -4,6 +4,7 @@ langchain==0.2.16
 langchain-community==0.2.16
 langchain-core==0.2.38
 langchain-groq==0.1.9
+groq==0.5.0
 
 chromadb==0.4.22
 pypdf==3.17.4
@@ -15,5 +16,4 @@ requests==2.31.0
 beautifulsoup4==4.12.3
 validators==0.22.0
 
-groq
-python-dotenv
+python-dotenv==1.0.1

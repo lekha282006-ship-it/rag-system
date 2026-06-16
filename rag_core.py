@@ -14,11 +14,10 @@ from langchain.retrievers import EnsembleRetriever
 from langchain.schema import BaseRetriever, Document
 from sentence_transformers import CrossEncoder
 
-# Note: Ensure url_ingestion.py exists in your workspace containing these functions
+# Safely manage URL loader integration
 try:
     from url_ingestion import ingest_urls, validate_url
 except ImportError:
-    # Fallback placeholders if file isn't created yet to prevent complete crash
     def validate_url(url: str) -> bool: return True
     def ingest_urls(urls: list, processed: set) -> dict: 
         return {'success': [], 'failed': [], 'skipped': [], 'total_chunks': 0, 'all_documents': []}
@@ -109,7 +108,7 @@ class RAGCore:
 
         self.llm = ChatGroq(
             model=self.model_name,
-            temperature=0,
+            temperature=0.5,  # Balanced temperature for fluid creative chat and steady structural extraction
             groq_api_key=os.getenv("GROQ_API_KEY")
         )
 
@@ -151,12 +150,11 @@ class RAGCore:
         else:
             target_vectorstore.add_documents(texts)
 
-        # Vectorstore state handles tracking persistence across newer variants
         if hasattr(target_vectorstore, 'persist'):
             target_vectorstore.persist()
             
         self.document_chunks.extend(texts)
-        self.qa_chain = None
+        self.qa_chain = None  # Force chain rebuild on next query evaluation
         print(f"Successfully ingested {len(texts)} chunks from {pdf_path}")
 
     def load_vectorstore(self) -> None:
@@ -165,7 +163,6 @@ class RAGCore:
         if self.vectorstore:
             print("Loaded existing vector store from disk")
             try:
-                # --- FIX: Fetch raw data to rebuild chunks for BM25 ---
                 raw_data = self.vectorstore.get()
                 if raw_data and 'documents' in raw_data and 'metadatas' in raw_data:
                     self.document_chunks = [
@@ -179,15 +176,20 @@ class RAGCore:
             print("No existing vector store found. Please ingest documents first.")
 
     def create_qa_chain(self) -> None:
-        """Create the RAG question-answering chain with hybrid search and reranking."""
+        """Create the RAG question-answering chain with hybrid search and conversational flexibility."""
         if self.vectorstore is None:
             raise ValueError("Vector store not initialized. Please ingest documents first.")
 
         if not self.document_chunks:
             raise ValueError("No document chunks available. Please ingest documents first.")
 
-        prompt_template = """Use the following pieces of context to answer the question at the end. 
-If you don't know the answer, just say that you don't know, don't try to make up an answer.
+        # ChatGPT style hybrid prompt architecture
+        prompt_template = """You are a helpful, intelligent, and highly articulate conversational AI Assistant named "Document Intelligence Assistant".
+
+Analyze the conversation based on these flexible rules:
+1. CASUAL CHAT & GREETINGS: If the user greets you (e.g., "hi", "hello", "heyy", "how are you") or asks small-talk questions, respond warmly, naturally, and helpfully like a classic conversational AI (ChatGPT style). Do not say "I don't know" to greetings.
+2. GENERAL KNOWLEDGE: If the question is a general question unrelated to specific documents, answer comprehensively using your broad default intelligence.
+3. DOCUMENT INQUIRIES: If the query asks about specific files, profiles, or data contained within the source context below, prioritize extracting facts accurately from that context.
 
 Context: {context}
 
@@ -212,9 +214,25 @@ Answer:"""
         )
 
     def query(self, question: str) -> dict:
-        """Query the RAG system with a question."""
-        # Fallback to normal Groq chat if no documents exist
-        if not self.document_chunks:
+        """Query the RAG system with a question or fall back gracefully to direct chat."""
+        
+        # Forces a database evaluation to pull BOTH PDFs and Web Content chunks into memory uniformly
+        if self.vectorstore is not None:
+            try:
+                raw_data = self.vectorstore.get()
+                if raw_data and 'documents' in raw_data and 'metadatas' in raw_data:
+                    current_db_chunks = [
+                        Document(page_content=content, metadata=meta)
+                        for content, meta in zip(raw_data['documents'], raw_data['metadatas'])
+                    ]
+                    
+                    if len(current_db_chunks) != len(self.document_chunks):
+                        self.document_chunks = current_db_chunks
+                        self.qa_chain = None  
+            except Exception as e:
+                print(f"Sync checkpoint warning inside core engine: {e}")
+
+        if not self.document_chunks or self.vectorstore is None:
             response = self.llm.invoke(question)
             return {
                 "answer": response.content,
@@ -270,37 +288,45 @@ Answer:"""
             if hasattr(self.vectorstore, 'persist'):
                 self.vectorstore.persist()
                 
-            self.qa_chain = None
+            self.qa_chain = None  
             print(f"Successfully ingested {results['total_chunks']} chunks from {len(results['success'])} URLs")
 
         return results
 
-    def clear_vectorstore(self) -> None:
-        """Clear the vector store by wiping database contents internally to bypass Windows file locks."""
+    def clear_vectorstore(self):
+        """Safely purges the database from the inside out to bypass file locking."""
+        import shutil
+        import gc
+        
+        # 1. Drop active graph pipelines
         self.qa_chain = None
         
         if self.vectorstore is not None:
             try:
-                # Get all document IDs currently in the Chroma database
-                existing_data = self.vectorstore.get()
-                if existing_data and 'ids' in existing_data and existing_data['ids']:
-                    # Delete all IDs from the collection internally
-                    self.vectorstore.delete(ids=existing_data['ids'])
+                # 2. Tell Chroma to drop data internally
+                self.vectorstore.delete_collection()
+            except Exception:
+                pass
+            self.vectorstore = None
+        
+        # 3. Release background thread handles
+        gc.collect()
+        
+        # 4. Attempt filesystem deletion
+        db_path = self.persist_directory
+        uploads_path = "./uploads"
+        
+        for path in [db_path, uploads_path]:
+            if os.path.exists(path):
+                try:
+                    shutil.rmtree(path)
+                except Exception:
+                    pass
                     
-                # For newer Chroma versions, persist the empty state
-                if hasattr(self.vectorstore, 'persist'):
-                    self.vectorstore.persist()
-                    
-                print("Chroma collection cleared successfully via internal delete.")
-            except Exception as e:
-                print(f"Internal database clear failed, attempting fallback: {e}")
-                # Fallback: if it's completely empty or errors out, reset the reference
-                self.vectorstore = None
-
-        # Reset internal application states
+        # 5. Clear state configurations 
         self.document_chunks = []
         self.processed_urls = set()
         
-        # Clear the Streamlit resource cache so it doesn't hold stale connections
+        # 6. Clear Streamlit asset resource caches
         load_vectorstore.clear()
-        print("Knowledge base states reset.")
+        print("Knowledge base states successfully wiped.")
