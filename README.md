@@ -1,4 +1,4 @@
-# 📄 Document Intelligence Assistant
+# 📄 Document Intelligence Assistant(RAG CHATBOT)
 
 An AI-powered **Document Question Answering (Q&A) system** featuring a multi-stage hybrid retrieval pipeline, cross-encoder reranking, conversational flexibility, and source transparency. The application dynamically ingests local PDF documents and extracts live web content from user-provided URLs to build an on-the-fly searchable knowledge base.
 
