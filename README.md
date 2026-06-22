@@ -1,3 +1,5 @@
+<img width="1901" height="918" alt="Screenshot 2026-06-22 144317" src="https://github.com/user-attachments/assets/b020cd98-8769-433f-8d87-b18b2624ea04" />
+<img width="1893" height="838" alt="Screenshot 2026-06-22 144034" src="https://github.com/user-attachments/assets/d5e104d5-b827-4ebd-a926-26b54726699f" />
 # 📄 Document Intelligence Assistant(RAG CHATBOT)
 
 An AI-powered **Document Question Answering (Q&A) system** featuring a multi-stage hybrid retrieval pipeline, cross-encoder reranking, conversational flexibility, and source transparency. The application dynamically ingests local PDF documents and extracts live web content from user-provided URLs to build an on-the-fly searchable knowledge base.
