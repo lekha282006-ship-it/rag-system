@@ -25,6 +25,11 @@ Maintains active dialogue history to resolve pronoun references and support cohe
 ### 📖 Transparent Source Verification
 Displays expandable source sections beneath responses, allowing users to inspect the original text chunks, page numbers, or live web links used to generate answers.
 
+
+
+<img width="1901" height="918" alt="Screenshot 2026-06-22 144317" src="https://github.com/user-attachments/assets/b020cd98-8769-433f-8d87-b18b2624ea04" />
+<img width="1893" height="838" alt="Screenshot 2026-06-22 144034" src="https://github.com/user-attachments/assets/d5e104d5-b827-4ebd-a926-26b54726699f" />
+
 ---
 
 # 🛠️ System Architecture & Tech Stack
@@ -43,9 +48,6 @@ Displays expandable source sections beneath responses, allowing users to inspect
 | Persistent Storage       | SQLite3 (Chroma Core backend Engine)                                  |
 
 ---
-
-<img width="1901" height="918" alt="Screenshot 2026-06-22 144317" src="https://github.com/user-attachments/assets/b020cd98-8769-433f-8d87-b18b2624ea04" />
-<img width="1893" height="838" alt="Screenshot 2026-06-22 144034" src="https://github.com/user-attachments/assets/d5e104d5-b827-4ebd-a926-26b54726699f" />
 # 📁 Project Structure
 
 ```text
