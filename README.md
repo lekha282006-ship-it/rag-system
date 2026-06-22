@@ -44,6 +44,8 @@ Displays expandable source sections beneath responses, allowing users to inspect
 
 ---
 
+<img width="1901" height="918" alt="Screenshot 2026-06-22 144317" src="https://github.com/user-attachments/assets/b020cd98-8769-433f-8d87-b18b2624ea04" />
+<img width="1893" height="838" alt="Screenshot 2026-06-22 144034" src="https://github.com/user-attachments/assets/d5e104d5-b827-4ebd-a926-26b54726699f" />
 # 📁 Project Structure
 
 ```text
@@ -95,9 +97,6 @@ Start the Streamlit server:
 Bash
 streamlit run app.py
 The application will launch on your local host and automatically open in your default web browser.
-
-<img width="1901" height="918" alt="Screenshot 2026-06-22 144317" src="https://github.com/user-attachments/assets/b020cd98-8769-433f-8d87-b18b2624ea04" />
-<img width="1893" height="838" alt="Screenshot 2026-06-22 144034" src="https://github.com/user-attachments/assets/d5e104d5-b827-4ebd-a926-26b54726699f" />
 
 PDF Documents                  Web Content URLs
              │                               │
